@@ -1,0 +1,804 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>単語近傍チェッカー</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@400;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #f4f4f1;
+        --surface: #ffffff;
+        --field: #fbfbfa;
+        --ink: #1d1b16;
+        --sub: #6a675e;
+        --line: #ddd9cf;
+        --accent: #c0391b;
+        --accent-strong: #a02e13;
+        --accent-ink: #ffffff;
+        --ok: #2e7d32;
+        --warn: #a8540a;
+        --warn-bg: #fdf3e3;
+        --chip-bg: #f1efe9;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #141518;
+          --surface: #1e2025;
+          --field: #191b1f;
+          --ink: #ece9e1;
+          --sub: #a3a099;
+          --line: #35373e;
+          --accent: #e85d3d;
+          --accent-strong: #f0704f;
+          --accent-ink: #ffffff;
+          --ok: #7bc47f;
+          --warn: #e8a04c;
+          --warn-bg: #2c2417;
+          --chip-bg: #26282e;
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+        font-size: 15px;
+        line-height: 1.6;
+        -webkit-text-size-adjust: 100%;
+      }
+      button, select, input:not([type="checkbox"], [type="radio"]) { min-height: 2.25rem; }
+      button { font-family: inherit; cursor: pointer; }
+      .wrap { max-width: 1240px; margin: 0 auto; padding: 18px 18px 28px; }
+
+      /* ---------- controls ---------- */
+      .controls {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 16px 20px 18px;
+      }
+      .controls-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 18px 28px;
+        align-items: start;
+      }
+      .ctl-label {
+        display: block;
+        font-size: 12.5px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        color: var(--sub);
+        margin-bottom: 8px;
+      }
+      .hint { margin: 7px 0 0; font-size: 12px; color: var(--sub); line-height: 1.5; }
+      .dist-row { display: flex; align-items: center; gap: 12px; }
+      .dist-row input[type="range"] { flex: 1 1 auto; min-width: 90px; accent-color: var(--accent); min-height: 2.25rem; }
+      .dist-num { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 14px; }
+      .dist-num input[type="number"] {
+        width: 4.6em; padding: 6px 8px; font-size: 15px; text-align: right;
+        border: 1px solid var(--line); border-radius: 7px;
+        background: var(--field); color: var(--ink); font-family: inherit;
+      }
+      .segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+      .segmented .seg-btn {
+        display: flex; align-items: center; min-height: 2.25rem;
+        padding: 6px 16px; font-size: 14px; font-weight: 500;
+        background: var(--field); color: var(--sub);
+        border: none; border-radius: 0; font-family: inherit; cursor: pointer;
+      }
+      .segmented .seg-btn + .seg-btn { border-left: 1px solid var(--line); }
+      .segmented .seg-btn.active { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+      .segmented .seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+      .pos-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+      .pos-grid .check {
+        display: inline-flex; align-items: center; gap: 7px;
+        min-height: 2.25rem; padding: 5px 12px 5px 9px;
+        border: 1px solid var(--line); border-radius: 8px;
+        background: var(--field); font-size: 14px; cursor: pointer; user-select: none;
+      }
+      .pos-grid .check input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; flex: none; }
+      .pos-grid .check:has(input:disabled) { opacity: 0.45; cursor: default; }
+      .action-ctl { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+      .primary {
+        background: var(--accent); color: var(--accent-ink);
+        border: none; border-radius: 8px;
+        padding: 10px 28px; font-size: 15.5px; font-weight: 700; letter-spacing: 0.04em;
+        min-height: 2.75rem;
+      }
+      .primary:hover { background: var(--accent-strong); }
+      .primary:disabled { opacity: 0.55; cursor: wait; }
+      .status { margin: 0; font-size: 12.5px; color: var(--sub); display: flex; align-items: center; gap: 7px; }
+      .status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sub); flex: none; }
+      .status.loading .dot { background: var(--warn); animation: pulse 1.1s ease-in-out infinite; }
+      .status.ok .dot { background: var(--ok); }
+      .status.warn { color: var(--warn); }
+      .status.warn .dot { background: var(--warn); }
+      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+      @media (prefers-reduced-motion: reduce) {
+        .status.loading .dot { animation: none; }
+        * { transition: none !important; }
+      }
+      .fallback-note {
+        margin-top: 14px; padding: 10px 14px;
+        background: var(--warn-bg); color: var(--warn);
+        border-radius: 8px; font-size: 13px; line-height: 1.6;
+      }
+      .custom-ctl { margin-top: 18px; }
+      textarea.custom-words {
+        display: block; width: 100%; height: auto; min-height: 0; flex: none;
+        border: 1px solid var(--line); border-radius: 8px;
+        padding: 10px 12px;
+        font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+        font-size: 14.5px; line-height: 1.6; letter-spacing: normal;
+      }
+      textarea.custom-words:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+      .chip .badge {
+        font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; line-height: 1.5;
+        background: var(--accent); color: var(--accent-ink);
+        border-radius: 4px; padding: 0 5px;
+      }
+      .result mark.custom { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+      /* ---------- workspace ---------- */
+      .workspace {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;
+      }
+      @media (max-width: 900px) {
+        .workspace { grid-template-columns: 1fr; }
+      }
+      .pane {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        display: flex; flex-direction: column;
+        overflow: hidden;
+      }
+      .pane:focus-within { border-color: var(--accent); }
+      .pane-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        padding: 10px 14px; border-bottom: 1px solid var(--line);
+        flex-wrap: wrap;
+      }
+      .pane-head h2 { margin: 0; font-size: 13.5px; font-weight: 700; letter-spacing: 0.05em; }
+      .pane-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+      .char-count { font-size: 12.5px; color: var(--sub); margin-right: 4px; font-variant-numeric: tabular-nums; }
+      .ghost {
+        background: transparent; color: var(--ink);
+        border: 1px solid var(--line); border-radius: 7px;
+        padding: 5px 12px; font-size: 13px; min-height: 2.25rem;
+      }
+      .ghost:hover { border-color: var(--sub); }
+      textarea {
+        flex: 1 1 auto; width: 100%; height: 56vh; min-height: 300px;
+        border: none; resize: vertical; padding: 18px 20px;
+        background: var(--field); color: var(--ink);
+        font-family: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+        font-size: 16.5px; line-height: 1.9; letter-spacing: 0.02em;
+      }
+      textarea:focus { outline: none; }
+      textarea::placeholder { color: var(--sub); font-family: "Zen Kaku Gothic New", sans-serif; font-size: 14.5px; }
+      .local-note { margin: 0; padding: 8px 14px 10px; font-size: 12px; color: var(--sub); border-top: 1px solid var(--line); }
+      .run-status { font-size: 12.5px; color: var(--sub); }
+      .legend { display: none; flex-wrap: wrap; gap: 6px; padding: 10px 14px 0; }
+      .legend.show { display: flex; }
+      .chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: var(--chip-bg); border: 1px solid var(--line); border-radius: 999px;
+        padding: 4px 11px 4px 8px; font-size: 13px; min-height: 2rem; color: var(--ink);
+      }
+      .chip i { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+      .chip:hover { border-color: var(--sub); }
+      .legend.focus-active .chip { opacity: 0.45; }
+      .legend.focus-active .chip.focused { opacity: 1; border-color: var(--ink); font-weight: 700; }
+      .chip.locked { outline: 2px solid var(--ink); outline-offset: 1px; }
+      .focus-hint { margin: 0; padding: 8px 14px 0; font-size: 12px; color: var(--sub); line-height: 1.5; }
+      .result {
+        flex: 1 1 auto; height: 56vh; min-height: 300px; overflow: auto;
+        padding: 18px 20px;
+        font-family: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+        font-size: 16.5px; line-height: 1.9; letter-spacing: 0.02em;
+        white-space: pre-wrap; overflow-wrap: anywhere;
+      }
+      @media (max-width: 900px) {
+        textarea, .result { height: 44vh; }
+      }
+      .result .placeholder {
+        color: var(--sub);
+        font-family: "Zen Kaku Gothic New", sans-serif; font-size: 14.5px; line-height: 1.7; margin: 0;
+      }
+      .result mark { border-radius: 3px; padding: 0 1px; cursor: pointer; }
+      .result mark.flash { outline: 3px solid var(--ink); outline-offset: 1px; }
+      .result.focus-active mark { opacity: 0.16; }
+      .result.focus-active mark.focused {
+        opacity: 1; font-weight: 600;
+        outline: 2px solid var(--ink); outline-offset: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="controls" aria-label="チェック設定">
+        <div class="controls-grid">
+          <div class="ctl">
+            <label class="ctl-label" for="distNum">近接距離</label>
+            <div class="dist-row">
+              <input type="range" id="distRange" min="50" max="1000" step="10" value="200" aria-label="近接距離（スライダー）" />
+              <span class="dist-num"><input type="number" id="distNum" min="50" max="1000" step="10" value="200" /> 文字以内</span>
+            </div>
+            <p class="hint">同じ単語がこの文字数以内に再び現れたら、重複として色付けします。</p>
+          </div>
+          <div class="ctl">
+            <span class="ctl-label" id="minlenLabel">対象にする単語の長さ</span>
+            <div class="segmented" role="group" aria-labelledby="minlenLabel">
+              <button type="button" class="seg-btn" data-minlen="1" aria-pressed="false">1文字から</button>
+              <button type="button" class="seg-btn active" data-minlen="2" aria-pressed="true">2文字以上</button>
+            </div>
+            <p class="hint">活用する語は基本形（原形）の長さで数えます。</p>
+          </div>
+          <div class="ctl">
+            <span class="ctl-label" id="posLabel">対象の品詞</span>
+            <div class="pos-grid" role="group" aria-labelledby="posLabel">
+              <label class="check"><input type="checkbox" data-pos="noun" checked /><span>名詞</span></label>
+              <label class="check"><input type="checkbox" data-pos="formal" checked /><span>形式名詞</span></label>
+              <label class="check"><input type="checkbox" data-pos="adj" checked /><span>形容詞</span></label>
+              <label class="check"><input type="checkbox" data-pos="verb" checked /><span>動詞</span></label>
+              <label class="check"><input type="checkbox" data-pos="particle" checked /><span>助詞</span></label>
+              <label class="check"><input type="checkbox" data-pos="aux" checked /><span>助動詞</span></label>
+            </div>
+            <p class="hint" id="posNote">形式名詞は「こと」「もの」などの名詞・非自立です。</p>
+          </div>
+          <div class="ctl action-ctl">
+            <button type="button" class="primary" id="runBtn">チェックする</button>
+            <p class="status loading" id="dictStatus"><span class="dot"></span><span id="dictStatusText">形態素解析の辞書を読み込んでいます…</span></p>
+          </div>
+        </div>
+        <div class="ctl custom-ctl">
+          <label class="ctl-label" for="customWords">チェックしたい語・表現（登録語）</label>
+          <textarea id="customWords" class="custom-words" rows="3" placeholder="1行に1つ入力してください（例：ということ／気がした／にもかかわらず）"></textarea>
+          <p class="hint">書き癖として気になる単語やフレーズを登録できます。形態素解析ではなく文字列そのままで探すので、複合表現も対象にできます。品詞・長さの設定は効かず、距離以内に再登場したら色付けします（重なる場合は長い登録語を優先）。登録内容はこのブラウザに保存されます（原稿テキストは保存されません）。</p>
+        </div>
+        <div class="fallback-note" id="fallbackNote" hidden>
+          形態素解析（kuromoji）の辞書を読み込めなかったため、簡易解析で動作しています。文字の種類の切れ目で単語を切り出す方式で、活用の同一視や品詞の絞り込みは行われません。
+        </div>
+      </section>
+
+      <div class="workspace">
+        <section class="pane">
+          <div class="pane-head">
+            <h2>原稿テキスト</h2>
+            <div class="pane-tools">
+              <span class="char-count" id="charCount"></span>
+              <button type="button" class="ghost" id="fileBtn">.txtを開く</button>
+              <button type="button" class="ghost" id="sampleBtn">サンプル</button>
+              <button type="button" class="ghost" id="clearBtn">消去</button>
+            </div>
+          </div>
+          <textarea id="input" placeholder="ここに原稿テキストを貼り付けてください" aria-label="原稿テキスト"></textarea>
+          <p class="local-note">入力したテキストはこのブラウザの中だけで処理され、外部に送信されることはありません。</p>
+        </section>
+
+        <section class="pane">
+          <div class="pane-head">
+            <h2>チェック結果</h2>
+            <span class="run-status" id="runStatus"></span>
+          </div>
+          <p class="focus-hint" id="focusHint" hidden>色付けされた単語（または上のチップ）にカーソルを合わせると、その単語の出現箇所だけが際立ちます。クリックすると強調を固定でき、もう一度クリックするか本文の余白をクリックすると解除されます。</p>
+          <div class="legend" id="legend" aria-label="色付けされた単語の一覧"></div>
+          <div class="result" id="result"><p class="placeholder">「チェックする」を押すと、近接して重複する単語が色付けされて表示されます。同じ単語には同じ色が付きます。単語にカーソルを合わせる／クリックすると、その単語の出現箇所だけを際立たせることができます。</p></div>
+        </section>
+      </div>
+      <input type="file" id="fileInput" accept=".txt,text/plain" hidden />
+    </main>
+
+    <script src="assets/kuromoji.js"></script>
+    <script>
+      (function () {
+        'use strict';
+
+        var DIC_PATHS = ['assets/dict/', 'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/'];
+        var PALETTE = [
+          ['#e03131', '#ffffff'], ['#2f9e44', '#ffffff'], ['#1971c2', '#ffffff'],
+          ['#e8590c', '#ffffff'], ['#9c36b5', '#ffffff'], ['#0ca678', '#ffffff'],
+          ['#f08c00', '#141414'], ['#d6336c', '#ffffff'], ['#74b816', '#141414'],
+          ['#1098ad', '#ffffff'], ['#5f3dc4', '#ffffff'], ['#a61e4d', '#ffffff'],
+          ['#087f5b', '#ffffff'], ['#e67700', '#ffffff'], ['#364fc7', '#ffffff'],
+          ['#94712f', '#ffffff']
+        ];
+        var SAMPLE = '夕方の駅前は、雨上がりの光に濡れていた。彼女は傘を閉じて、濡れた傘を小さくたたんだ。駅前の喫茶店の窓には、雨の雫がまだ残っている。彼女は窓の外を見た。見慣れた駅前の景色が、雨のせいで少しだけ違って見えた。\n\n彼女は席に着くと、冷めたコーヒーを一口飲んだ。コーヒーは苦かった。苦いのはコーヒーのせいだけではない気がした。窓の外では、傘をさした人々が駅前に向かって歩いている。彼女もやがて立ち上がり、傘を開いて雨の中へ歩き出した。';
+
+        var input = document.getElementById('input');
+        var resultEl = document.getElementById('result');
+        var legendEl = document.getElementById('legend');
+        var runBtn = document.getElementById('runBtn');
+        var runStatus = document.getElementById('runStatus');
+        var charCount = document.getElementById('charCount');
+        var distRange = document.getElementById('distRange');
+        var distNum = document.getElementById('distNum');
+        var dictStatus = document.getElementById('dictStatus');
+        var dictStatusText = document.getElementById('dictStatusText');
+        var fallbackNote = document.getElementById('fallbackNote');
+        var posNote = document.getElementById('posNote');
+        var fileInput = document.getElementById('fileInput');
+        var focusHint = document.getElementById('focusHint');
+        var customWordsEl = document.getElementById('customWords');
+
+        var hoverKey = null;  // word key currently hovered (mark or chip)
+        var lockedKey = null; // word key pinned by click
+
+        var tokenizer = null;
+        var dictState = 'loading'; // loading | ready | failed
+        var pendingRun = false;
+        var cache = { text: null, tokens: null, mode: null };
+
+        /* ---------- dictionary loading ---------- */
+        function setDictStatus() {
+          var posBoxes = document.querySelectorAll('[data-pos]');
+          if (dictState === 'ready') {
+            dictStatus.className = 'status ok';
+            dictStatusText.textContent = '形態素解析の準備ができました';
+            fallbackNote.hidden = true;
+            posNote.textContent = '形式名詞は「こと」「もの」などの名詞・非自立です。';
+            posBoxes.forEach(function (b) { b.disabled = false; });
+          } else if (dictState === 'failed') {
+            dictStatus.className = 'status warn';
+            dictStatusText.textContent = '辞書を読み込めなかったため、簡易解析で動作します';
+            fallbackNote.hidden = false;
+            posNote.textContent = '簡易解析中は品詞の絞り込みは使えません。';
+            posBoxes.forEach(function (b) { b.disabled = true; });
+          } else {
+            dictStatus.className = 'status loading';
+            dictStatusText.textContent = '形態素解析の辞書を読み込んでいます…';
+          }
+        }
+
+        function loadDict() {
+          if (typeof kuromoji === 'undefined') {
+            dictState = 'failed';
+            setDictStatus();
+            return;
+          }
+          var attempt = 0;
+          var timer = setTimeout(function () {
+            if (dictState === 'loading') {
+              dictState = 'failed';
+              setDictStatus();
+              if (pendingRun) { pendingRun = false; run(); }
+            }
+          }, 90000);
+
+          function tryNext() {
+            if (dictState !== 'loading') return;
+            if (attempt >= DIC_PATHS.length) {
+              clearTimeout(timer);
+              dictState = 'failed';
+              setDictStatus();
+              if (pendingRun) { pendingRun = false; run(); }
+              return;
+            }
+            var path = DIC_PATHS[attempt++];
+            try {
+              kuromoji.builder({ dicPath: path }).build(function (err, tk) {
+                if (dictState !== 'loading') return;
+                if (err || !tk) { tryNext(); return; }
+                clearTimeout(timer);
+                tokenizer = tk;
+                var wasFallback = cache.mode === 'fallback';
+                dictState = 'ready';
+                setDictStatus();
+                if (pendingRun) { pendingRun = false; run(); }
+                else if (wasFallback && input.value) { run(); }
+              });
+            } catch (e) {
+              tryNext();
+            }
+          }
+          tryNext();
+        }
+
+        /* ---------- tokenizers ---------- */
+        function categoryOf(t) {
+          if (t.pos === '名詞') return t.pos_detail_1 === '非自立' ? 'formal' : 'noun';
+          if (t.pos === '形容詞') return 'adj';
+          if (t.pos === '動詞') return 'verb';
+          if (t.pos === '助詞') return 'particle';
+          if (t.pos === '助動詞') return 'aux';
+          return null;
+        }
+
+        function tokenizeKuromoji(text) {
+          var raw = tokenizer.tokenize(text);
+          var tokens = [];
+          var pos = 0;
+          for (var i = 0; i < raw.length; i++) {
+            var t = raw[i];
+            var surface = t.surface_form;
+            var start = pos;
+            pos += surface.length;
+            var key = (t.basic_form && t.basic_form !== '*') ? t.basic_form : surface;
+            tokens.push({ surface: surface, key: key, cat: categoryOf(t), start: start, end: pos });
+          }
+          return tokens;
+        }
+
+        function tokenizeFallback(text) {
+          var tokens = [];
+          var re = /[一-龯々〆ヵヶ]+|[ァ-ヶー]+|[ぁ-ん]+|[A-Za-z0-9]+/g;
+          var m;
+          while ((m = re.exec(text)) !== null) {
+            tokens.push({ surface: m[0], key: m[0], cat: 'any', start: m.index, end: m.index + m[0].length });
+          }
+          return tokens;
+        }
+
+        /* ---------- settings ---------- */
+        var minLenValue = 2;
+
+        /* ---------- custom registered words ---------- */
+        var LS_KEY = 'tangoKinbouChecker.customWords';
+
+        function getCustomWords() {
+          var seen = {};
+          var out = [];
+          customWordsEl.value.split(/\r?\n/).forEach(function (line) {
+            var w = line.trim();
+            if (w && !seen[w]) { seen[w] = true; out.push(w); }
+          });
+          return out;
+        }
+
+        function loadCustomWords() {
+          try {
+            var v = window.localStorage.getItem(LS_KEY);
+            if (v) customWordsEl.value = v;
+          } catch (e) { /* storage unavailable: the list just won't persist */ }
+        }
+
+        function saveCustomWords() {
+          try { window.localStorage.setItem(LS_KEY, customWordsEl.value); } catch (e) {}
+        }
+
+        function getSettings() {
+          var cats = {};
+          document.querySelectorAll('[data-pos]').forEach(function (b) { cats[b.getAttribute('data-pos')] = b.checked; });
+          var dist = parseInt(distNum.value, 10);
+          if (isNaN(dist)) dist = 200;
+          dist = Math.max(50, Math.min(1000, dist));
+          return { cats: cats, minLen: minLenValue, dist: dist, customWords: getCustomWords() };
+        }
+
+        /* ---------- marking ---------- */
+        function computeMarks(text, tokens, settings, fallbackMode) {
+          var byKey = new Map();
+          tokens.forEach(function (t) {
+            if (t.key.length < settings.minLen) return;
+            if (!fallbackMode && (!t.cat || !settings.cats[t.cat])) return;
+            if (!byKey.has(t.key)) byKey.set(t.key, []);
+            byKey.get(t.key).push(t);
+          });
+          var marked = [];
+          byKey.forEach(function (occs, key) {
+            var hit = {};
+            for (var i = 1; i < occs.length; i++) {
+              if (occs[i].start - occs[i - 1].end <= settings.dist) { hit[i] = true; hit[i - 1] = true; }
+            }
+            Object.keys(hit).forEach(function (idx) {
+              var o = occs[Number(idx)];
+              marked.push({ start: o.start, end: o.end, id: 'w:' + key, label: key, custom: false });
+            });
+          });
+          var customMarks = findCustomMarks(text, settings.customWords, settings.dist);
+          if (customMarks.length) {
+            marked = marked.filter(function (mk) {
+              return !customMarks.some(function (cm) { return mk.start < cm.end && cm.start < mk.end; });
+            });
+            marked = marked.concat(customMarks);
+          }
+          marked.sort(function (a, b) { return a.start - b.start || b.end - a.end; });
+          var merged = [];
+          marked.forEach(function (mk) {
+            var last = merged[merged.length - 1];
+            if (last && mk.start < last.end) {
+              if (last.id === mk.id && mk.end > last.end) last.end = mk.end;
+              return;
+            }
+            merged.push({ start: mk.start, end: mk.end, id: mk.id, label: mk.label, custom: mk.custom });
+          });
+          var colorOf = new Map();
+          merged.forEach(function (mk) {
+            if (!colorOf.has(mk.id)) {
+              colorOf.set(mk.id, { color: PALETTE[colorOf.size % PALETTE.length], label: mk.label, custom: mk.custom });
+            }
+          });
+          return { marked: merged, colorOf: colorOf };
+        }
+
+        /* Literal matching for user-registered words/phrases.
+           Longer registrations win overlaps; POS and min-length filters do not apply. */
+        function findCustomMarks(text, words, dist) {
+          if (!words || !words.length) return [];
+          var sorted = words.slice().sort(function (a, b) { return b.length - a.length; });
+          var claimed = [];
+          var marks = [];
+          sorted.forEach(function (w) {
+            var occs = [];
+            var from = 0;
+            while (from <= text.length - w.length) {
+              var found = text.indexOf(w, from);
+              if (found === -1) break;
+              occs.push({ start: found, end: found + w.length });
+              from = found + 1;
+            }
+            occs = occs.filter(function (o) {
+              return !claimed.some(function (c) { return o.start < c.end && c.start < o.end; });
+            });
+            occs.forEach(function (o) { claimed.push(o); });
+            var hit = {};
+            for (var i = 1; i < occs.length; i++) {
+              if (occs[i].start - occs[i - 1].end <= dist) { hit[i] = true; hit[i - 1] = true; }
+            }
+            Object.keys(hit).forEach(function (idx) {
+              var o = occs[Number(idx)];
+              marks.push({ start: o.start, end: o.end, id: 'c:' + w, label: w, custom: true });
+            });
+          });
+          return marks;
+        }
+
+        function esc(s) {
+          return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+        function escAttr(s) {
+          return esc(s).replace(/"/g, '&quot;');
+        }
+
+        /* ---------- focus highlight (hover / click-lock) ---------- */
+        function applyFocus() {
+          var key = hoverKey !== null ? hoverKey : lockedKey;
+          var active = key !== null;
+          resultEl.classList.toggle('focus-active', active);
+          var marks = resultEl.getElementsByTagName('mark');
+          for (var i = 0; i < marks.length; i++) {
+            marks[i].classList.toggle('focused', active && marks[i].getAttribute('data-key') === key);
+          }
+          legendEl.classList.toggle('focus-active', active);
+          var chips = legendEl.querySelectorAll('.chip');
+          chips.forEach(function (chip) {
+            var ck = chip.getAttribute('data-key');
+            chip.classList.toggle('focused', active && ck === key);
+            chip.classList.toggle('locked', lockedKey !== null && ck === lockedKey);
+            chip.setAttribute('aria-pressed', lockedKey !== null && ck === lockedKey ? 'true' : 'false');
+          });
+        }
+
+        function resetFocus() {
+          hoverKey = null;
+          lockedKey = null;
+          resultEl.classList.remove('focus-active');
+          legendEl.classList.remove('focus-active');
+        }
+
+        function render(text, res) {
+          resetFocus();
+          if (res.marked.length === 0) {
+            resultEl.innerHTML = '<p class="placeholder">現在の設定では、近接して重複する単語は見つかりませんでした。距離を広げるか、対象の品詞・長さを見直してみてください。</p>';
+            legendEl.className = 'legend';
+            legendEl.innerHTML = '';
+            focusHint.hidden = true;
+            return;
+          }
+          var html = '';
+          var cur = 0;
+          res.marked.forEach(function (mk) {
+            if (mk.start < cur) return;
+            var info = res.colorOf.get(mk.id);
+            html += esc(text.slice(cur, mk.start));
+            html += '<mark data-key="' + escAttr(mk.id) + '"' + (mk.custom ? ' class="custom"' : '') + ' style="background:' + info.color[0] + ';color:' + info.color[1] + '">' + esc(text.slice(mk.start, mk.end)) + '</mark>';
+            cur = mk.end;
+          });
+          html += esc(text.slice(cur));
+          resultEl.innerHTML = html;
+
+          var chips = '';
+          res.colorOf.forEach(function (info, id) {
+            chips += '<button type="button" class="chip" data-key="' + escAttr(id) + '"><i style="background:' + info.color[0] + '"></i>' + esc(info.label) + (info.custom ? '<span class="badge">登録語</span>' : '') + '</button>';
+          });
+          legendEl.innerHTML = chips;
+          legendEl.className = 'legend show';
+          focusHint.hidden = false;
+        }
+
+        /* ---------- run ---------- */
+        function refreshFromCache() {
+          if (cache.text === null || cache.text !== input.value || !cache.tokens) return;
+          var settings = getSettings();
+          var res = computeMarks(cache.text, cache.tokens, settings, cache.mode === 'fallback');
+          render(cache.text, res);
+        }
+
+        function run() {
+          var text = input.value;
+          if (!text) {
+            resetFocus();
+            resultEl.innerHTML = '<p class="placeholder">まず原稿テキストを貼り付けてください。</p>';
+            legendEl.className = 'legend';
+            legendEl.innerHTML = '';
+            focusHint.hidden = true;
+            runStatus.textContent = '';
+            return;
+          }
+          if (dictState === 'loading') {
+            pendingRun = true;
+            runStatus.textContent = '辞書の読み込みが終わると自動でチェックします';
+            return;
+          }
+          var mode = dictState === 'ready' ? 'kuromoji' : 'fallback';
+          runBtn.disabled = true;
+          runStatus.textContent = '解析中…';
+          setTimeout(function () {
+            try {
+              if (cache.text !== text || cache.mode !== mode) {
+                var tokens = mode === 'kuromoji' ? tokenizeKuromoji(text) : tokenizeFallback(text);
+                cache = { text: text, tokens: tokens, mode: mode };
+              }
+              refreshFromCache();
+              runStatus.textContent = mode === 'fallback' ? '簡易解析で表示しています' : '';
+            } catch (e) {
+              runStatus.textContent = '解析中にエラーが発生しました';
+            }
+            runBtn.disabled = false;
+          }, 30);
+        }
+
+        /* ---------- events ---------- */
+        runBtn.addEventListener('click', run);
+
+        function syncDist(fromRange) {
+          var v = fromRange ? distRange.value : distNum.value;
+          distRange.value = v;
+          distNum.value = v;
+          refreshFromCache();
+        }
+        var distTimer = null;
+        distRange.addEventListener('input', function () {
+          distNum.value = distRange.value;
+          clearTimeout(distTimer);
+          distTimer = setTimeout(refreshFromCache, 120);
+        });
+        distNum.addEventListener('change', function () { syncDist(false); });
+
+        document.querySelectorAll('[data-pos]').forEach(function (b) {
+          b.addEventListener('change', refreshFromCache);
+        });
+        var customTimer = null;
+        customWordsEl.addEventListener('input', function () {
+          saveCustomWords();
+          clearTimeout(customTimer);
+          customTimer = setTimeout(refreshFromCache, 200);
+        });
+        document.querySelectorAll('.seg-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            minLenValue = parseInt(btn.getAttribute('data-minlen'), 10);
+            document.querySelectorAll('.seg-btn').forEach(function (b) {
+              var on = b === btn;
+              b.classList.toggle('active', on);
+              b.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+            refreshFromCache();
+          });
+        });
+
+        function updateCharCount() {
+          var n = input.value.length;
+          charCount.textContent = n ? n.toLocaleString('ja-JP') + ' 文字' : '';
+        }
+        input.addEventListener('input', updateCharCount);
+
+        document.getElementById('fileBtn').addEventListener('click', function () { fileInput.click(); });
+        fileInput.addEventListener('change', function () {
+          var file = fileInput.files && fileInput.files[0];
+          if (!file) return;
+          var reader = new FileReader();
+          reader.onload = function () {
+            input.value = String(reader.result || '');
+            updateCharCount();
+            run();
+          };
+          reader.onerror = function () { runStatus.textContent = 'ファイルを読み込めませんでした'; };
+          reader.readAsText(file, 'UTF-8');
+          fileInput.value = '';
+        });
+
+        document.getElementById('sampleBtn').addEventListener('click', function () {
+          input.value = SAMPLE;
+          updateCharCount();
+          run();
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', function () {
+          input.value = '';
+          cache = { text: null, tokens: null, mode: null };
+          updateCharCount();
+          resetFocus();
+          resultEl.innerHTML = '<p class="placeholder">「チェックする」を押すと、近接して重複する単語が色付けされて表示されます。同じ単語には同じ色が付きます。単語にカーソルを合わせる／クリックすると、その単語の出現箇所だけを際立たせることができます。</p>';
+          legendEl.className = 'legend';
+          legendEl.innerHTML = '';
+          focusHint.hidden = true;
+          runStatus.textContent = '';
+          input.focus();
+        });
+
+        /* ---------- focus interactions: marks ---------- */
+        function keyFromEvent(ev, selector) {
+          var el = ev.target && ev.target.closest ? ev.target.closest(selector) : null;
+          return el ? el.getAttribute('data-key') : null;
+        }
+
+        resultEl.addEventListener('mouseover', function (ev) {
+          var key = keyFromEvent(ev, 'mark');
+          if (key !== hoverKey) { hoverKey = key; applyFocus(); }
+        });
+        resultEl.addEventListener('mouseleave', function () {
+          if (hoverKey !== null) { hoverKey = null; applyFocus(); }
+        });
+        resultEl.addEventListener('click', function (ev) {
+          var key = keyFromEvent(ev, 'mark');
+          if (key !== null) {
+            lockedKey = lockedKey === key ? null : key;
+          } else {
+            lockedKey = null;
+          }
+          applyFocus();
+        });
+
+        /* ---------- focus interactions: legend chips ---------- */
+        legendEl.addEventListener('mouseover', function (ev) {
+          var key = keyFromEvent(ev, '.chip');
+          if (key !== hoverKey) { hoverKey = key; applyFocus(); }
+        });
+        legendEl.addEventListener('mouseleave', function () {
+          if (hoverKey !== null) { hoverKey = null; applyFocus(); }
+        });
+        legendEl.addEventListener('focusin', function (ev) {
+          var key = keyFromEvent(ev, '.chip');
+          if (key !== hoverKey) { hoverKey = key; applyFocus(); }
+        });
+        legendEl.addEventListener('focusout', function () {
+          if (hoverKey !== null) { hoverKey = null; applyFocus(); }
+        });
+        legendEl.addEventListener('click', function (ev) {
+          var chip = ev.target.closest ? ev.target.closest('.chip') : null;
+          if (!chip) return;
+          var key = chip.getAttribute('data-key');
+          if (lockedKey === key) {
+            // Re-clicking the locked chip releases the lock (no scroll).
+            lockedKey = null;
+            applyFocus();
+            return;
+          }
+          lockedKey = key;
+          applyFocus();
+          var marks = resultEl.getElementsByTagName('mark');
+          for (var i = 0; i < marks.length; i++) {
+            if (marks[i].getAttribute('data-key') === key) {
+              marks[i].scrollIntoView({ block: 'center', behavior: 'smooth' });
+              marks[i].classList.add('flash');
+              (function (el) { setTimeout(function () { el.classList.remove('flash'); }, 1400); })(marks[i]);
+              break;
+            }
+          }
+        });
+
+        loadCustomWords();
+        setDictStatus();
+        loadDict();
+      })();
+    </script>
+  </body>
+</html>
