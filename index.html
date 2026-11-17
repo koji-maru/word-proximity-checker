@@ -145,6 +145,13 @@
         border-radius: 4px; padding: 0 5px;
       }
       .result mark.custom { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+      .result mark.ending {
+        text-decoration-line: underline;
+        text-decoration-style: dashed;
+        text-decoration-thickness: 2px;
+        text-underline-offset: 4px;
+      }
+      .chip .badge.ending-badge { background: var(--ink); }
 
       /* ---------- workspace ---------- */
       .workspace {
@@ -254,6 +261,13 @@
             </div>
             <p class="hint" id="posNote">形式名詞は「こと」「もの」などの名詞・非自立です。</p>
           </div>
+          <div class="ctl">
+            <span class="ctl-label" id="endingLabel">文末表現の連続</span>
+            <div class="pos-grid" role="group" aria-labelledby="endingLabel">
+              <label class="check"><input type="checkbox" id="endingCheck" checked /><span>文末の連続をチェック</span></label>
+            </div>
+            <p class="hint">「ました。でした。です。」「あった。あった。」のように、文末表現が隣り合う文で続いたときに色付けします。単語の近接とは別に、文の並びで判定します。です・ます系（です／ます／ました／でした／でしょう／ましょう など）は表記が違ってもすべて「丁寧体」としてまとめて数え、だった／あった なども同じ仲間として数えます。</p>
+          </div>
           <div class="ctl action-ctl">
             <button type="button" class="primary" id="runBtn">チェックする</button>
             <p class="status loading" id="dictStatus"><span class="dot"></span><span id="dictStatusText">形態素解析の辞書を読み込んでいます…</span></p>
@@ -289,9 +303,9 @@
             <h2>チェック結果</h2>
             <span class="run-status" id="runStatus"></span>
           </div>
-          <p class="focus-hint" id="focusHint" hidden>色付けされた単語（または上のチップ）にカーソルを合わせると、その単語の出現箇所だけが際立ちます。クリックすると強調を固定でき、もう一度クリックするか本文の余白をクリックすると解除されます。</p>
+          <p class="focus-hint" id="focusHint" hidden>色付けされた単語・文末（または上のチップ）にカーソルを合わせると、その出現箇所だけが際立ちます。クリックすると強調を固定でき、もう一度クリックするか本文の余白をクリックすると解除されます。文末の連続は破線の下線で区別しています。</p>
           <div class="legend" id="legend" aria-label="色付けされた単語の一覧"></div>
-          <div class="result" id="result"><p class="placeholder">「チェックする」を押すと、近接して重複する単語が色付けされて表示されます。同じ単語には同じ色が付きます。単語にカーソルを合わせる／クリックすると、その単語の出現箇所だけを際立たせることができます。</p></div>
+          <div class="result" id="result"><p class="placeholder">「チェックする」を押すと、近接して重複する単語が色付けされて表示されます。同じ単語には同じ色が付きます。文末表現が連続している場合は、その文末が破線の下線付きで色付けされます。単語・文末にカーソルを合わせる／クリックすると、その出現箇所だけを際立たせることができます。</p></div>
         </section>
       </div>
       <input type="file" id="fileInput" accept=".txt,text/plain" hidden />
@@ -328,6 +342,7 @@
         var fileInput = document.getElementById('fileInput');
         var focusHint = document.getElementById('focusHint');
         var customWordsEl = document.getElementById('customWords');
+        var endingCheck = document.getElementById('endingCheck');
 
         var hoverKey = null;  // word key currently hovered (mark or chip)
         var lockedKey = null; // word key pinned by click
@@ -470,7 +485,129 @@
           var dist = parseInt(distNum.value, 10);
           if (isNaN(dist)) dist = 200;
           dist = Math.max(50, Math.min(1000, dist));
-          return { cats: cats, minLen: minLenValue, dist: dist, customWords: getCustomWords() };
+          return { cats: cats, minLen: minLenValue, dist: dist, customWords: getCustomWords(), ending: !endingCheck || endingCheck.checked };
+        }
+
+        /* ---------- sentence-ending patterns ----------
+           Surfaces are normalized into categories, so different surface forms
+           of the same ending (ました/でした, だった/あった, …) count as one
+           pattern. All です・ます系 endings (です/ます/ました/でした/
+           でしょう/ましょう/ください/…), present and past alike, share the
+           single category 'polite' (丁寧体). The polite forms of the modal
+           families count as 丁寧体 too (ようです/ようでした, そうです/
+           そうでした, みたいです, のです/んです, かもしれません,
+           であります): their plain forms (ようだ/そうだ/のだ/…) keep their
+           own family categories. So a run that mixes them —
+           e.g. ました。でした。です。 — counts as one continuous run
+           instead of breaking where the category used to change.
+           Matching is longest-suffix-first. This is plain string
+           matching on sentence tails, independent of kuromoji, so it also
+           works in fallback (簡易解析) mode. */
+        var ENDING_PATTERNS = [
+          ['ありませんでした', 'polite'], ['いませんでした', 'polite'],
+          ['ませんでした', 'polite'], ['ましたか', 'polite'], ['でしたか', 'polite'],
+          ['ました', 'polite'], ['でした', 'polite'],
+          ['ありませんか', 'polite'], ['いませんか', 'polite'],
+          ['ありません', 'polite'], ['いません', 'polite'],
+          ['ですか', 'polite'], ['ますか', 'polite'], ['ましょうか', 'polite'], ['ましょう', 'polite'],
+          ['ください', 'polite'], ['ません', 'polite'], ['あります', 'polite'],
+          ['でしょうか', 'polite'], ['でしょう', 'polite'],
+          ['です', 'polite'], ['ます', 'polite'],
+          ['であった', 'past-plain'], ['だった', 'past-plain'], ['あった', 'past-plain'], ['いた', 'past-plain'],
+          ['いなかった', 'nai'], ['ではなかった', 'nai'], ['じゃなかった', 'nai'],
+          ['なかった', 'nai'], ['ではない', 'nai'], ['じゃない', 'nai'], ['でない', 'nai'], ['ない', 'nai'],
+          ['していなかった', 'teiru'], ['していない', 'teiru'], ['きていない', 'teiru'],
+          ['していた', 'teiru'], ['している', 'teiru'], ['きていた', 'teiru'], ['きている', 'teiru'],
+          ['ていない', 'teiru'], ['ていた', 'teiru'], ['ている', 'teiru'],
+          ['できる', 'suru'], ['できた', 'suru'], ['する', 'suru'], ['した', 'suru'],
+          ['であります', 'polite'], ['である', 'dearu'],
+          ['たくなかった', 'tai'], ['たかった', 'tai'], ['たくない', 'tai'], ['たい', 'tai'],
+          ['らしかった', 'rashii'], ['らしい', 'rashii'],
+          ['だろうか', 'darou'], ['だろう', 'darou'],
+          ['かもしれません', 'polite'], ['かもしれない', 'kamoshirenai'],
+          ['ようでした', 'polite'], ['ようだった', 'youda'], ['ようです', 'polite'], ['ようだ', 'youda'],
+          ['そうでした', 'polite'], ['そうだった', 'souda'], ['そうです', 'polite'], ['そうだ', 'souda'],
+          ['みたいでした', 'polite'], ['みたいだった', 'mitaida'], ['みたいです', 'polite'], ['みたいだ', 'mitaida'],
+          ['のではなかった', 'noda'], ['のではない', 'noda'], ['のだった', 'noda'],
+          ['のですか', 'polite'], ['のです', 'polite'], ['のだ', 'noda'], ['んです', 'polite'], ['んだ', 'noda'],
+          ['だ', 'da']
+        ];
+        var ENDING_SORTED = ENDING_PATTERNS.slice().sort(function (a, b) { return b[0].length - a[0].length; });
+
+        /* Split into sentences on 。！？ and newlines (blank segments are not
+           sentences, so a paragraph break does not break adjacency), extract
+           each sentence's ending pattern, and mark groups of >= 2 adjacent
+           sentences that share the same normalized category. The character
+           distance setting does not apply here: adjacency is by sentence. */
+        function findEndingMarks(text) {
+          if (!text) return [];
+          var sentences = [];
+          var start = 0;
+          function pushSeg(s, e) {
+            if (text.slice(s, e).trim().length) sentences.push({ start: s, end: e });
+          }
+          for (var i = 0; i < text.length; i++) {
+            var ch = text[i];
+            if (ch === '。' || ch === '！' || ch === '？' || ch === '\n') {
+              pushSeg(start, i);
+              start = i + 1;
+            }
+          }
+          if (start < text.length) pushSeg(start, text.length);
+
+          var infos = sentences.map(function (s) {
+            var end = s.end;
+            while (end > s.start && /[ \t　」』）)】〉》”’]/.test(text.charAt(end - 1))) end--;
+            if (end <= s.start) return null;
+            var core = text.slice(s.start, end);
+            // A trailing よ/ね/よね particle rides on top of the ending
+            // (ですよ, ましたね…): match without it, but include it in the span.
+            var matchCore = core;
+            var pm = /(よね|よ|ね|わ)$/.exec(core);
+            if (pm && core.length > pm[0].length) matchCore = core.slice(0, core.length - pm[0].length);
+            var matched = null;
+            var k, pat;
+            for (k = 0; k < ENDING_SORTED.length; k++) {
+              pat = ENDING_SORTED[k][0];
+              if (matchCore.length >= pat.length && matchCore.slice(matchCore.length - pat.length) === pat) { matched = ENDING_SORTED[k]; break; }
+            }
+            if (!matched && matchCore !== core) {
+              for (k = 0; k < ENDING_SORTED.length; k++) {
+                pat = ENDING_SORTED[k][0];
+                if (core.length >= pat.length && core.slice(core.length - pat.length) === pat) { matched = ENDING_SORTED[k]; matchCore = core; break; }
+              }
+            }
+            if (!matched) return null;
+            return {
+              start: s.start + matchCore.length - matched[0].length,
+              end: end,
+              cat: matched[1],
+              surface: matched[0]
+            };
+          });
+
+          var marks = [];
+          var group = [];
+          function flush() {
+            if (group.length >= 2) {
+              group.forEach(function (g) {
+                // The 丁寧体 group mixes surfaces (ました/でした/です/…),
+                // so its chip is labelled by group name, not by one surface.
+                // Identical endings repeated 2+ times are still caught here,
+                // since they trivially share the same category.
+                var label = g.cat === 'polite' ? '丁寧体' : '「' + g.surface + '」系';
+                marks.push({ start: g.start, end: g.end, id: 'e:' + g.cat, label: label, custom: false, ending: true });
+              });
+            }
+            group = [];
+          }
+          infos.forEach(function (info) {
+            if (!info) { flush(); return; }
+            if (group.length && group[group.length - 1].cat !== info.cat) flush();
+            group.push(info);
+          });
+          flush();
+          return marks;
         }
 
         /* ---------- marking ---------- */
@@ -500,6 +637,16 @@
             });
             marked = marked.concat(customMarks);
           }
+          var endingMarks = settings.ending ? findEndingMarks(text) : [];
+          if (endingMarks.length) {
+            // The ending span wins over overlapping word marks (but not over
+            // registered-word marks, which the merge below resolves by span).
+            marked = marked.filter(function (mk) {
+              if (mk.custom) return true;
+              return !endingMarks.some(function (em) { return mk.start < em.end && em.start < mk.end; });
+            });
+            marked = marked.concat(endingMarks);
+          }
           marked.sort(function (a, b) { return a.start - b.start || b.end - a.end; });
           var merged = [];
           marked.forEach(function (mk) {
@@ -508,12 +655,16 @@
               if (last.id === mk.id && mk.end > last.end) last.end = mk.end;
               return;
             }
-            merged.push({ start: mk.start, end: mk.end, id: mk.id, label: mk.label, custom: mk.custom });
+            merged.push({ start: mk.start, end: mk.end, id: mk.id, label: mk.label, custom: mk.custom, ending: !!mk.ending });
+          });
+          var endingCounts = {};
+          merged.forEach(function (mk) {
+            if (mk.ending) endingCounts[mk.id] = (endingCounts[mk.id] || 0) + 1;
           });
           var colorOf = new Map();
           merged.forEach(function (mk) {
             if (!colorOf.has(mk.id)) {
-              colorOf.set(mk.id, { color: PALETTE[colorOf.size % PALETTE.length], label: mk.label, custom: mk.custom });
+              colorOf.set(mk.id, { color: PALETTE[colorOf.size % PALETTE.length], label: mk.label, custom: mk.custom, ending: !!mk.ending, count: endingCounts[mk.id] || 0 });
             }
           });
           return { marked: merged, colorOf: colorOf };
@@ -587,7 +738,7 @@
         function render(text, res) {
           resetFocus();
           if (res.marked.length === 0) {
-            resultEl.innerHTML = '<p class="placeholder">現在の設定では、近接して重複する単語は見つかりませんでした。距離を広げるか、対象の品詞・長さを見直してみてください。</p>';
+            resultEl.innerHTML = '<p class="placeholder">現在の設定では、近接して重複する単語も、連続する文末表現も見つかりませんでした。距離を広げるか、対象の品詞・長さを見直してみてください。</p>';
             legendEl.className = 'legend';
             legendEl.innerHTML = '';
             focusHint.hidden = true;
@@ -599,7 +750,7 @@
             if (mk.start < cur) return;
             var info = res.colorOf.get(mk.id);
             html += esc(text.slice(cur, mk.start));
-            html += '<mark data-key="' + escAttr(mk.id) + '"' + (mk.custom ? ' class="custom"' : '') + ' style="background:' + info.color[0] + ';color:' + info.color[1] + '">' + esc(text.slice(mk.start, mk.end)) + '</mark>';
+            html += '<mark data-key="' + escAttr(mk.id) + '"' + (mk.custom ? ' class="custom"' : (mk.ending ? ' class="ending"' : '')) + ' style="background:' + info.color[0] + ';color:' + info.color[1] + '">' + esc(text.slice(mk.start, mk.end)) + '</mark>';
             cur = mk.end;
           });
           html += esc(text.slice(cur));
@@ -607,7 +758,7 @@
 
           var chips = '';
           res.colorOf.forEach(function (info, id) {
-            chips += '<button type="button" class="chip" data-key="' + escAttr(id) + '"><i style="background:' + info.color[0] + '"></i>' + esc(info.label) + (info.custom ? '<span class="badge">登録語</span>' : '') + '</button>';
+            chips += '<button type="button" class="chip" data-key="' + escAttr(id) + '"><i style="background:' + info.color[0] + '"></i>' + esc(info.label) + (info.ending && info.count ? ' ×' + info.count : '') + (info.custom ? '<span class="badge">登録語</span>' : '') + (info.ending ? '<span class="badge ending-badge">文末連続</span>' : '') + '</button>';
           });
           legendEl.innerHTML = chips;
           legendEl.className = 'legend show';
@@ -676,6 +827,7 @@
         document.querySelectorAll('[data-pos]').forEach(function (b) {
           b.addEventListener('change', refreshFromCache);
         });
+        if (endingCheck) endingCheck.addEventListener('change', refreshFromCache);
         var customTimer = null;
         customWordsEl.addEventListener('input', function () {
           saveCustomWords();
@@ -726,7 +878,7 @@
           cache = { text: null, tokens: null, mode: null };
           updateCharCount();
           resetFocus();
-          resultEl.innerHTML = '<p class="placeholder">「チェックする」を押すと、近接して重複する単語が色付けされて表示されます。同じ単語には同じ色が付きます。単語にカーソルを合わせる／クリックすると、その単語の出現箇所だけを際立たせることができます。</p>';
+          resultEl.innerHTML = '<p class="placeholder">「チェックする」を押すと、近接して重複する単語が色付けされて表示されます。同じ単語には同じ色が付きます。文末表現が連続している場合は、その文末が破線の下線付きで色付けされます。単語・文末にカーソルを合わせる／クリックすると、その出現箇所だけを際立たせることができます。</p>';
           legendEl.className = 'legend';
           legendEl.innerHTML = '';
           focusHint.hidden = true;
